@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./components/Login";
 import Register from "./components/Register";
 import GeoTagPage from "./components/GeoTagPage";
@@ -20,6 +20,8 @@ const App = () => {
           <div className="w-full max-w-lg bg-gray-900 shadow-md rounded-lg p-6">
             {/* Define Routes */}
             <Routes>
+              {/* Redirect `/` to `/login` */}
+              <Route path="/" element={<Navigate to="/login" replace />} />
               <Route path="/login" element={<Login />} />
               <Route path="/geotag" element={<GeoTagPage />} />
               <Route path="/register" element={<Register />} />
