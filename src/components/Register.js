@@ -21,13 +21,16 @@ const Register = () => {
     setSuccess(""); // Reset success
 
     try {
-      const response = await fetch("https://geotagger.azurewebsites.net/api/Auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
+      const response = await fetch(
+        "https://geotagger.azurewebsites.net/api/Auth/register",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(formData),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -36,6 +39,7 @@ const Register = () => {
 
       const data = await response.json();
       setSuccess(data.message || "Registration successful!");
+      setFormData({ name: "", email: "", password: "" }); // Reset form
     } catch (err) {
       setError(err.message || "Registration failed. Please try again.");
     }
@@ -53,7 +57,16 @@ const Register = () => {
         backgroundColor: "#fff",
       }}
     >
-      <h2 style={{ textAlign: "center", marginBottom: "20px" }}>Register</h2>
+      <h2
+        style={{
+          textAlign: "center",
+          marginBottom: "20px",
+          color: "#333",
+          fontWeight: "bold",
+        }}
+      >
+        Register
+      </h2>
       <form
         onSubmit={handleSubmit}
         style={{ display: "flex", flexDirection: "column", gap: "15px" }}
@@ -70,6 +83,8 @@ const Register = () => {
             border: "1px solid #ddd",
             borderRadius: "4px",
             fontSize: "16px",
+            color: "#000",
+            backgroundColor: "#fff",
           }}
         />
         <input
@@ -84,6 +99,8 @@ const Register = () => {
             border: "1px solid #ddd",
             borderRadius: "4px",
             fontSize: "16px",
+            color: "#000",
+            backgroundColor: "#fff",
           }}
         />
         <input
@@ -98,6 +115,8 @@ const Register = () => {
             border: "1px solid #ddd",
             borderRadius: "4px",
             fontSize: "16px",
+            color: "#000",
+            backgroundColor: "#fff",
           }}
         />
         <button
@@ -119,12 +138,26 @@ const Register = () => {
           Register
         </button>
         {success && (
-          <p style={{ color: "green", textAlign: "center", marginTop: "10px" }}>
+          <p
+            style={{
+              color: "green",
+              textAlign: "center",
+              marginTop: "10px",
+              fontWeight: "bold",
+            }}
+          >
             {success}
           </p>
         )}
         {error && (
-          <p style={{ color: "red", textAlign: "center", marginTop: "10px" }}>
+          <p
+            style={{
+              color: "red",
+              textAlign: "center",
+              marginTop: "10px",
+              fontWeight: "bold",
+            }}
+          >
             {error}
           </p>
         )}

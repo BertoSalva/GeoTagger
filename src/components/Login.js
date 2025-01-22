@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUserPlus, faMapMarkerAlt } from "@fortawesome/free-solid-svg-icons";
-import {jwtDecode} from "jwt-decode"; // Corrected import
+import { jwtDecode } from "jwt-decode"; // Corrected import
 
 const Login = ({ onLoginSuccess }) => {
   const [formData, setFormData] = useState({ email: "", password: "" });
@@ -18,13 +18,16 @@ const Login = ({ onLoginSuccess }) => {
     setError(""); // Reset error
 
     try {
-      const response = await fetch("https://geotagger.azurewebsites.net/api/Auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
+      const response = await fetch(
+        "https://geotagger.azurewebsites.net/api/Auth/login",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(formData),
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -93,7 +96,10 @@ const Login = ({ onLoginSuccess }) => {
           Login with your email
         </p>
 
-        <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column" }}>
+        <form
+          onSubmit={handleLogin}
+          style={{ display: "flex", flexDirection: "column" }}
+        >
           <input
             type="email"
             name="email"
@@ -107,6 +113,8 @@ const Login = ({ onLoginSuccess }) => {
               border: "1px solid #ddd",
               borderRadius: "5px",
               fontSize: "16px",
+              color: "#000", // Ensure text is always black
+              backgroundColor: "#fff", // Ensure consistent background
             }}
           />
           <input
@@ -122,6 +130,8 @@ const Login = ({ onLoginSuccess }) => {
               border: "1px solid #ddd",
               borderRadius: "5px",
               fontSize: "16px",
+              color: "#000", // Ensure text is always black
+              backgroundColor: "#fff", // Ensure consistent background
             }}
           />
           <button
@@ -144,7 +154,9 @@ const Login = ({ onLoginSuccess }) => {
           </button>
 
           {error && (
-            <p style={{ color: "red", marginTop: "10px", textAlign: "center" }}>{error}</p>
+            <p style={{ color: "red", marginTop: "10px", textAlign: "center" }}>
+              {error}
+            </p>
           )}
         </form>
       </div>
