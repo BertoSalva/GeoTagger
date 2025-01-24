@@ -1,13 +1,20 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const Register = () => {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
+    preseasonRate: "",
+    gameRate: "",
+    practiceRate: "",
+    sport: "",
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const navigate = useNavigate();
 
   // Handle input changes
   const handleInputChange = (e) => {
@@ -17,8 +24,16 @@ const Register = () => {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(""); // Reset error
-    setSuccess(""); // Reset success
+    setError("");
+    setSuccess("");
+
+    // Convert rates to numbers
+    const formDataWithRates = {
+      ...formData,
+      preseasonRate: parseFloat(formData.preseasonRate),
+      gameRate: parseFloat(formData.gameRate),
+      practiceRate: parseFloat(formData.practiceRate),
+    };
 
     try {
       const response = await fetch(
@@ -28,7 +43,7 @@ const Register = () => {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(formDataWithRates),
         }
       );
 
@@ -39,7 +54,19 @@ const Register = () => {
 
       const data = await response.json();
       setSuccess(data.message || "Registration successful!");
-      setFormData({ name: "", email: "", password: "" }); // Reset form
+      setFormData({
+        name: "",
+        email: "",
+        password: "",
+        preseasonRate: "",
+        gameRate: "",
+        practiceRate: "",
+        sport: "",
+      });
+
+      setTimeout(() => {
+        navigate("/login");
+      }, 2000);
     } catch (err) {
       setError(err.message || "Registration failed. Please try again.");
     }
@@ -119,6 +146,76 @@ const Register = () => {
             backgroundColor: "#fff",
           }}
         />
+        <input
+          type="number"
+          name="preseasonRate"
+          placeholder="Preseason Rate"
+          value={formData.preseasonRate}
+          onChange={handleInputChange}
+          style={{
+            padding: "12px",
+            border: "1px solid #ddd",
+            borderRadius: "4px",
+            fontSize: "16px",
+            color: "#000",
+            backgroundColor: "#fff",
+          }}
+        />
+        <input
+          type="number"
+          name="gameRate"
+          placeholder="Game Rate"
+          value={formData.gameRate}
+          onChange={handleInputChange}
+          style={{
+            padding: "12px",
+            border: "1px solid #ddd",
+            borderRadius: "4px",
+            fontSize: "16px",
+            color: "#000",
+            backgroundColor: "#fff",
+          }}
+        />
+        <input
+          type="number"
+          name="practiceRate"
+          placeholder="Practice Rate"
+          value={formData.practiceRate}
+          onChange={handleInputChange}
+          style={{
+            padding: "12px",
+            border: "1px solid #ddd",
+            borderRadius: "4px",
+            fontSize: "16px",
+            color: "#000",
+            backgroundColor: "#fff",
+          }}
+        />
+        <select
+          name="sport"
+          value={formData.sport}
+          onChange={handleInputChange}
+          style={{
+            padding: "12px",
+            border: "1px solid #ddd",
+            borderRadius: "4px",
+            fontSize: "16px",
+            color: "#000",
+            backgroundColor: "#fff",
+          }}
+          required
+        >
+          <option value="">Select a sport</option>
+          <option value="Soccer">Soccer</option>
+          <option value="Basketball">Basketball</option>
+          <option value="Tennis">Tennis</option>
+          <option value="Squash">Squash</option>
+          <option value="Rugby">Rugby</option>
+          <option value="Hockey">Hockey</option>
+          <option value="Swimming">Swimming</option>
+          <option value="Water Polo">Water Polo</option>
+          <option value="Athletics">Athletics</option>
+        </select>
         <button
           type="submit"
           style={{

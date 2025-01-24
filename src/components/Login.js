@@ -2,12 +2,12 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUserPlus, faMapMarkerAlt } from "@fortawesome/free-solid-svg-icons";
-import { jwtDecode } from "jwt-decode"; // Corrected import
+import {jwtDecode} from "jwt-decode"; // Corrected import
 
 const Login = ({ onLoginSuccess }) => {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
-  const navigate = useNavigate(); // Hook for navigation
+  const navigate = useNavigate();
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -15,7 +15,7 @@ const Login = ({ onLoginSuccess }) => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setError(""); // Reset error
+    setError("");
 
     try {
       const response = await fetch(
@@ -39,9 +39,14 @@ const Login = ({ onLoginSuccess }) => {
 
       // Decode the JWT token
       const decodedToken = jwtDecode(token);
-
-      // Log the decoded JWT token to the console
       console.log("Decoded JWT Token:", decodedToken);
+
+      // Extract and store the user's email
+      const email = decodedToken.email || decodedToken.sub; // Adjust based on your JWT structure
+      if (!email) {
+        throw new Error("Email not found in token.");
+      }
+      localStorage.setItem("email", email); // Store email in localStorage
 
       // Optional: Pass decoded token to parent (if needed)
       if (onLoginSuccess) onLoginSuccess(decodedToken);
@@ -55,7 +60,6 @@ const Login = ({ onLoginSuccess }) => {
 
   return (
     <div>
-      {/* Navigation Links */}
       <nav className="mb-6 text-center">
         <Link
           to="/register"
@@ -73,7 +77,6 @@ const Login = ({ onLoginSuccess }) => {
         </Link>
       </nav>
 
-      {/* Login Form */}
       <div
         style={{
           maxWidth: "400px",
@@ -85,7 +88,6 @@ const Login = ({ onLoginSuccess }) => {
           textAlign: "center",
         }}
       >
-        {/* Add Image */}
         <img
           src="/pbhs.png" // Use '/pbhs.png' for public folder
           alt="Logo"
@@ -113,8 +115,8 @@ const Login = ({ onLoginSuccess }) => {
               border: "1px solid #ddd",
               borderRadius: "5px",
               fontSize: "16px",
-              color: "#000", // Ensure text is always black
-              backgroundColor: "#fff", // Ensure consistent background
+              color: "#000",
+              backgroundColor: "#fff",
             }}
           />
           <input
@@ -130,8 +132,8 @@ const Login = ({ onLoginSuccess }) => {
               border: "1px solid #ddd",
               borderRadius: "5px",
               fontSize: "16px",
-              color: "#000", // Ensure text is always black
-              backgroundColor: "#fff", // Ensure consistent background
+              color: "#000",
+              backgroundColor: "#fff",
             }}
           />
           <button

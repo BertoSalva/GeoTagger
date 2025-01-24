@@ -5,7 +5,9 @@ import * as XLSX from "xlsx";
 const GeoTagPage = () => {
   const [location, setLocation] = useState(null);
   const [address, setAddress] = useState("");
+  const [ipAddress, setIpAddress] = useState("");
   const [error, setError] = useState("");
+  const [sessionType, setSessionType] = useState("Practice"); // Default dropdown value
 
   // Default coordinates if geolocation fails
   const defaultLocation = {
@@ -14,6 +16,18 @@ const GeoTagPage = () => {
   };
 
   const currentLocation = location || defaultLocation;
+
+  // Fetch IP address
+  const fetchIpAddress = async () => {
+    try {
+      const response = await fetch("https://api.ipify.org?format=json");
+      const data = await response.json();
+      setIpAddress(data.ip);
+    } catch (error) {
+      console.error("Failed to fetch IP address:", error);
+      setError("Failed to fetch IP address.");
+    }
+  };
 
   // Memoize initMap to resolve React Hook dependency warning
   const initMap = useCallback(() => {
@@ -32,6 +46,8 @@ const GeoTagPage = () => {
   }, [currentLocation]);
 
   useEffect(() => {
+    fetchIpAddress();
+
     if (window.google && window.google.maps) {
       initMap();
       return;
@@ -116,6 +132,8 @@ const GeoTagPage = () => {
           latitude,
           longitude,
           address,
+          sessionType, // Include session type
+          ipAddress, // Include IP address in the request
         }),
       });
   
@@ -135,34 +153,52 @@ const GeoTagPage = () => {
   const downloadClaimsAsExcel = async () => {
     try {
       const token = localStorage.getItem("token"); // Get the saved token
+      const userEmail = localStorage.getItem("email");
+  
+      if (!userEmail) {
+        setError("User email not found in local storage.");
+        console.error("User email is missing in local storage.");
+        return;
+      }
+  
       const response = await fetch("https://geotagger.azurewebsites.net/api/GeoTag", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-
+  
       if (!response.ok) {
         throw new Error("Failed to fetch claims.");
       }
-
+  
       const tags = await response.json();
-
+  
+      // Log fetched data
+      console.log("Fetched tags:", tags);
+  
+      // Filter tags by the logged-in user's email (case-insensitive)
+      const filteredTags = tags.filter(
+        (tag) => tag.taggedBy.toLowerCase() === userEmail.toLowerCase()
+      );
+  
+      // Log filtered tags
+      console.log("Filtered tags:", filteredTags);
+  
       // Process tags into a format suitable for Excel
-      const data = tags.map((tag) => {
-        const date = new Date(tag.createdAt);
-        const isWeekend = [0, 6].includes(date.getDay());
-        return {
-          Month: date.toLocaleString("default", { month: "long" }),
-          Day: date.toLocaleString("default", { weekday: "long" }),
-          "Claim Details": isWeekend ? "Game" : "Practice",
-          Rate: isWeekend ? 250 : 200,
-        };
-      });
-
+      const data = filteredTags.map((tag) => ({
+        Date: new Date(tag.createdAt).toLocaleDateString(),
+        "Session Type": tag.sessionType,
+        Rate: tag.rate,
+        Address: tag.address,
+      }));
+  
+      // Log the final data
+      console.log("Data for Excel:", data);
+  
       const worksheet = XLSX.utils.json_to_sheet(data);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Claims");
-
+  
       const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
       const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
       saveAs(blob, "claims.xlsx");
@@ -171,6 +207,8 @@ const GeoTagPage = () => {
       setError("Error downloading claims.");
     }
   };
+  
+  
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
@@ -182,6 +220,29 @@ const GeoTagPage = () => {
           className="w-6 h-6"
         />
       </h1>
+
+      <div className="flex flex-col items-center mb-6">
+        <label htmlFor="sessionType" className="mb-2 text-gray-700 font-medium">
+          Select Session Type:
+        </label>
+        <select
+          id="sessionType"
+          value={sessionType}
+          onChange={(e) => setSessionType(e.target.value)}
+          className="px-4 py-2 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          style={{ color: "black" }}
+        >
+          <option value="Preseason" style={{ color: "black" }}>
+            Preseason
+          </option>
+          <option value="Practice" style={{ color: "black" }}>
+            Practice
+          </option>
+          <option value="Game" style={{ color: "black" }}>
+            Game
+          </option>
+        </select>
+      </div>
 
       <div className="flex justify-center mb-6">
         <button
@@ -202,6 +263,12 @@ const GeoTagPage = () => {
         <div className="mt-6 p-4 border rounded-lg bg-gray-50">
           <h3 className="text-lg font-semibold text-gray-800">Address:</h3>
           <p className="text-gray-600">{address}</p>
+          {ipAddress && (
+            <div className="mt-2">
+              <h3 className="text-lg font-semibold text-gray-800">IP Address:</h3>
+              <p className="text-gray-600">{ipAddress}</p>
+            </div>
+          )}
         </div>
       )}
 
