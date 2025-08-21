@@ -37,7 +37,7 @@ const Register = () => {
 
     try {
       const response = await fetch(
-        "https://geotagger.azurewebsites.net/api/Auth/register",
+        "https://localhost:7047/api/Auth/register",
         {
           method: "POST",
           headers: {

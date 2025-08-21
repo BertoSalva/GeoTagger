@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUserPlus, faMapMarkerAlt } from "@fortawesome/free-solid-svg-icons";
-import {jwtDecode} from "jwt-decode"; // Corrected import
+import {jwtDecode} from "jwt-decode"; 
 
 const Login = ({ onLoginSuccess }) => {
   const [formData, setFormData] = useState({ email: "", password: "" });
@@ -19,7 +19,7 @@ const Login = ({ onLoginSuccess }) => {
 
     try {
       const response = await fetch(
-        "https://geotagger.azurewebsites.net/api/Auth/login",
+        "https://localhost:7047/api/Auth/login",
         {
           method: "POST",
           headers: {
