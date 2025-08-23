@@ -1,63 +1,103 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUserPlus, faMapMarkerAlt } from "@fortawesome/free-solid-svg-icons";
-import {jwtDecode} from "jwt-decode"; 
+import { jwtDecode } from "jwt-decode";
 
 const Login = ({ onLoginSuccess }) => {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  // --- helpers ---
+  const getEmailFromToken = (d) =>
+    d?.email ||
+    d?.sub ||
+    d?.["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/email"] ||
+    d?.["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] ||
+    null;
+
+  const getRoleFromToken = (d) =>
+    d?.role ||
+    d?.["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ||
+    "User";
+
+  const routeByRole = (role) => {
+    const r = String(role || "User").trim().toLowerCase();
+    if (r !== "user") navigate("/admin");
+    else navigate("/geotag");
+  };
+
+  // Auto-redirect if already logged in and token valid
+  // useEffect(() => {
+  //   const token = localStorage.getItem("token");
+  //   if (!token) return;
+
+  //   try {
+  //     const d = jwtDecode(token);
+  //     if (d?.exp && d.exp * 1000 <= Date.now()) {
+  //       // expired token; clear and stay on login
+  //       localStorage.removeItem("token");
+  //       localStorage.removeItem("email");
+  //       localStorage.removeItem("role");
+  //       return;
+  //     }
+  //     const email = localStorage.getItem("email") || getEmailFromToken(d);
+  //     const role = localStorage.getItem("role") || getRoleFromToken(d);
+  //     if (email) localStorage.setItem("email", email);
+  //     if (role) localStorage.setItem("role", role);
+  //     routeByRole(role);
+  //   } catch {
+  //     // bad token, ignore
+  //   }
+  // }, [navigate]);
+
+  // --- handlers ---
   const handleInputChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setFormData((s) => ({ ...s, [e.target.name]: e.target.value }));
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
     try {
-      const response = await fetch(
-        "https://localhost:7047/api/Auth/login",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(formData),
-        }
-      );
+      const response = await fetch("https://localhost:7047/api/Auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || "Invalid email or password.");
       }
 
       const { token } = await response.json();
-      localStorage.setItem("token", token); // Save token for future API calls
+      localStorage.setItem("token", token);
 
-      // Decode the JWT token
-      const decodedToken = jwtDecode(token);
-      console.log("Decoded JWT Token:", decodedToken);
+      const d = jwtDecode(token);
+      const email = getEmailFromToken(d);
+      const role = getRoleFromToken(d);
 
-      // Extract and store the user's email
-      const email = decodedToken.email || decodedToken.sub; // Adjust based on your JWT structure
-      if (!email) {
-        throw new Error("Email not found in token.");
-      }
-      localStorage.setItem("email", email); // Store email in localStorage
+      if (!email) throw new Error("Email not found in token.");
 
-      // Optional: Pass decoded token to parent (if needed)
-      if (onLoginSuccess) onLoginSuccess(decodedToken);
+      localStorage.setItem("email", email);
+      localStorage.setItem("role", role);
 
-      // Navigate to the GeoTag page
-      navigate("/geotag");
+      if (onLoginSuccess) onLoginSuccess({ ...d, email, role });
+
+      routeByRole(role);
     } catch (err) {
       setError(err.message || "Login failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
+  // --- ui ---
   return (
     <div>
       <nav className="mb-6 text-center">
@@ -89,7 +129,7 @@ const Login = ({ onLoginSuccess }) => {
         }}
       >
         <img
-          src="/pbhs.png" // Use '/pbhs.png' for public folder
+          src="/pbhs.png" // public folder
           alt="Logo"
           style={{ width: "100px", margin: "0 auto 20px auto", display: "block" }}
         />
@@ -98,10 +138,7 @@ const Login = ({ onLoginSuccess }) => {
           Login with your email
         </p>
 
-        <form
-          onSubmit={handleLogin}
-          style={{ display: "flex", flexDirection: "column" }}
-        >
+        <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column" }}>
           <input
             type="email"
             name="email"
@@ -138,21 +175,22 @@ const Login = ({ onLoginSuccess }) => {
           />
           <button
             type="submit"
+            disabled={loading}
             style={{
               padding: "12px",
-              backgroundColor: "#007BFF",
+              backgroundColor: loading ? "#7aaef7" : "#007BFF",
               color: "#fff",
               fontSize: "16px",
               fontWeight: "bold",
               border: "none",
               borderRadius: "4px",
-              cursor: "pointer",
+              cursor: loading ? "not-allowed" : "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
-            Login
+            {loading ? "Signing in..." : "Login"}
           </button>
 
           {error && (
