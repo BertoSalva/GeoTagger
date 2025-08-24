@@ -15,12 +15,14 @@ const GeoTagPage = () => {
   const defaultLocation = { latitude: 25.7566, longitude: 28.1914 };
   const currentLocation = location || defaultLocation;
 
-  // ---- helpers ----
+  // --------- helpers ----------
   const getEmailFromToken = () => {
     const cached = localStorage.getItem("email");
     if (cached) return cached;
+
     const token = localStorage.getItem("token");
     if (!token) return null;
+
     try {
       const decoded = jwtDecode(token);
       const email =
@@ -35,6 +37,33 @@ const GeoTagPage = () => {
     }
   };
 
+  // Pull a human-friendly display name from token; fallback to email prefix
+  const getDisplayNameFromToken = () => {
+    const cached = localStorage.getItem("displayName");
+    if (cached) return cached;
+
+    const token = localStorage.getItem("token");
+    if (!token) return null;
+
+    try {
+      const d = jwtDecode(token);
+      const name =
+        d.name ||
+        d.given_name ||
+        d["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"] ||
+        (d.email || d.sub || "").split("@")[0] ||
+        null;
+
+      if (name) localStorage.setItem("displayName", name);
+      return name;
+    } catch {
+      return null;
+    }
+  };
+
+  // Make a string safe for filenames
+  const safeFile = (s) => (s || "claims").replace(/[\\/:*?"<>|]+/g, "-").trim();
+
   const dateKey = (d) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
       d.getDate()
@@ -46,9 +75,7 @@ const GeoTagPage = () => {
       const email = localStorage.getItem("email") || getEmailFromToken();
       if (!email) return false;
 
-      const url = `https://localhost:7047/api/GeoTag?email=${encodeURIComponent(
-        email
-      )}`;
+      const url = `https://localhost:7047/api/GeoTag?email=${encodeURIComponent(email)}`;
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -56,9 +83,7 @@ const GeoTagPage = () => {
 
       const tags = await res.json();
       const today = dateKey(new Date());
-      const already = tags.some(
-        (t) => dateKey(new Date(t.createdAt)) === today
-      );
+      const already = tags.some((t) => dateKey(new Date(t.createdAt)) === today);
       setHasTaggedToday(already);
       return already;
     } catch {
@@ -78,7 +103,7 @@ const GeoTagPage = () => {
     }
   };
 
-  // Memoize initMap
+  // Google map
   const initMap = useCallback(() => {
     if (currentLocation && window.google && window.google.maps) {
       const mapOptions = {
@@ -164,7 +189,6 @@ const GeoTagPage = () => {
             const formattedAddress = data.results[0].formatted_address;
             setAddress(formattedAddress);
 
-            // Send location data to the backend API
             const ok = await tagLocationInDatabase(
               latitude,
               longitude,
@@ -237,9 +261,7 @@ const GeoTagPage = () => {
         return;
       }
 
-      const url = `https://localhost:7047/api/GeoTag?email=${encodeURIComponent(
-        email
-      )}`;
+      const url = `https://localhost:7047/api/GeoTag?email=${encodeURIComponent(email)}`;
       const response = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -301,7 +323,7 @@ const GeoTagPage = () => {
         ws.getRow(2).height = 35;
         ws.getRow(3).height = 35;
         ws.addImage(imgId, {
-          tl: { col: 1.7, row: 1.4 }, // ~between B & C, under title
+          tl: { col: 1.7, row: 1.4 }, // between B & C, under title
           ext: { width: 260, height: 140 },
           editAs: "oneCell",
         });
@@ -335,7 +357,7 @@ const GeoTagPage = () => {
           ws.getRow(rowIdx).eachCell((c, colNumber) => {
             c.border = { top: thinGray, left: thinGray, bottom: thinGray, right: thinGray };
             if (colNumber === 3) {
-              c.numFmt = '#,##0.00'; // or '"R" #,##0.00'
+              c.numFmt = '#,##0.00';
               c.alignment = { horizontal: "right" };
             }
           });
@@ -353,7 +375,7 @@ const GeoTagPage = () => {
         }
       });
 
-      // Apply a neat box + grid to the whole table (A..D, header..total)
+      // Apply box + grid to the whole table
       const tableEndRow = rowIdx;
       boxRange(ws, 1, headerRow, 4, tableEndRow);
 
@@ -375,13 +397,12 @@ const GeoTagPage = () => {
       summaryRows.forEach(([label, val]) => {
         ws.getRow(rowIdx).values = [label, val];
         if (String(label).toLowerCase().startsWith("net total")) {
-          ws.getCell(`B${rowIdx}`).numFmt = '#,##0.00'; // or '"R" #,##0.00'
+          ws.getCell(`B${rowIdx}`).numFmt = '#,##0.00';
         }
         rowIdx += 1;
       });
 
       const summaryEndRow = rowIdx - 1;
-      // Box around the "Summary" title + two columns of values (A:B)
       boxRange(ws, 1, summaryTitleRow, 2, summaryEndRow);
 
       // ---- Column widths ----
@@ -392,9 +413,18 @@ const GeoTagPage = () => {
         { key: "addr", width: 60 },
       ];
 
-      // ---- Save File ----
+      // ---- Save File (with name + date) ----
+      const displayName =
+        getDisplayNameFromToken() || (email ? email.split("@")[0] : "claims");
+      const today = new Date();
+      const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(
+        2,
+        "0"
+      )}-${String(today.getDate()).padStart(2, "0")}`;
+      const fileName = `${safeFile(displayName)}-claims-${ymd}.xlsx`;
+
       const out = await wb.xlsx.writeBuffer();
-      saveAs(new Blob([out]), "claims.xlsx");
+      saveAs(new Blob([out]), fileName);
     } catch (error) {
       console.error("Error downloading claims", error);
       setError((error && error.message) || "Error downloading claims.");
@@ -468,9 +498,7 @@ const GeoTagPage = () => {
           <p className="text-gray-600">{address}</p>
           {ipAddress && (
             <div className="mt-2">
-              <h3 className="text-lg font-semibold text-gray-800">
-                IP Address:
-              </h3>
+              <h3 className="text-lg font-semibold text-gray-800">IP Address:</h3>
               <p className="text-gray-600">{ipAddress}</p>
             </div>
           )}
