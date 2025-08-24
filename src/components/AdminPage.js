@@ -10,7 +10,7 @@ const AdminPage = () => {
     const load = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch("https://localhost:7047/api/GeoTag/claimants", {
+        const res = await fetch("https://geotagger-api.fly.dev/api/GeoTag/claimants", {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (!res.ok) {

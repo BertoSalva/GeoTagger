@@ -12,7 +12,7 @@ const AdminUserClaims = () => {
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(
-        `https://localhost:7047/api/GeoTag?email=${encodeURIComponent(email)}`,
+        `https://geotagger-api.fly.dev/api/GeoTag?email=${encodeURIComponent(email)}`,
         { headers: token ? { Authorization: `Bearer ${token}` } : {} }
       );
       if (!res.ok) {
@@ -38,7 +38,7 @@ const AdminUserClaims = () => {
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(
-        `https://localhost:7047/api/GeoTag/clear?email=${encodeURIComponent(email)}`,
+        `https://geotagger-api.fly.dev/api/GeoTag/clear?email=${encodeURIComponent(email)}`,
         { method: "DELETE", headers: token ? { Authorization: `Bearer ${token}` } : {} }
       );
       const payload = await res.json().catch(() => ({}));

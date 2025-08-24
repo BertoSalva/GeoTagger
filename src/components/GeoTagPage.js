@@ -75,7 +75,7 @@ const GeoTagPage = () => {
       const email = localStorage.getItem("email") || getEmailFromToken();
       if (!email) return false;
 
-      const url = `https://localhost:7047/api/GeoTag?email=${encodeURIComponent(email)}`;
+      const url = `https://geotagger-api.fly.dev/api/GeoTag?email=${encodeURIComponent(email)}`;
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -220,7 +220,7 @@ const GeoTagPage = () => {
         return false;
       }
 
-      const response = await fetch("https://localhost:7047/api/GeoTag", {
+      const response = await fetch("https://geotagger-api.fly.dev/api/GeoTag", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -261,7 +261,7 @@ const GeoTagPage = () => {
         return;
       }
 
-      const url = `https://localhost:7047/api/GeoTag?email=${encodeURIComponent(email)}`;
+      const url = `https://geotagger-api.fly.dev/api/GeoTag?email=${encodeURIComponent(email)}`;
       const response = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });

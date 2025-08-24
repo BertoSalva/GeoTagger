@@ -37,7 +37,7 @@ const Register = () => {
 
     try {
       const response = await fetch(
-        "https://localhost:7047/api/Auth/register",
+        "https://geotagger-api.fly.dev/api/Auth/register",
         {
           method: "POST",
           headers: {

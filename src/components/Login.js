@@ -64,7 +64,7 @@ const Login = ({ onLoginSuccess }) => {
     setLoading(true);
 
     try {
-      const response = await fetch("https://localhost:7047/api/Auth/login", {
+      const response = await fetch("https://geotagger-api.fly.dev/api/Auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
