@@ -6,17 +6,37 @@ const AdminPage = () => {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
+  const handleLogout = () => {
+    // Clear auth and go to login
+    localStorage.removeItem("token");
+    navigate("/login");
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch("https://geotagger-api.fly.dev/api/GeoTag/claimants", {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        if (!token) {
+          navigate("/login");
+          return;
+        }
+
+        const res = await fetch(
+          "https://geotagger-api.fly.dev/api/GeoTag/claimants",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (res.status === 401 || res.status === 403) {
+          // Token missing/expired/unauthorized
+          handleLogout();
+          return;
+        }
+
         if (!res.ok) {
           const body = await res.text();
           throw new Error(`(${res.status}) ${body || "Failed to load claimants."}`);
         }
+
         const data = await res.json();
         setRows(Array.isArray(data) ? data : []);
       } catch (e) {
@@ -24,18 +44,37 @@ const AdminPage = () => {
       }
     };
     load();
-  }, []);
+  }, [navigate]);
 
   return (
     <div className="mx-auto w-full text-gray-900">
       <div className="flex items-end justify-between flex-wrap gap-4 mb-4">
-        <h1 className="text-2xl font-semibold">Admin — Claims Overview</h1>
-        <p className="text-sm text-gray-300">
-          Tip: Click "View claims" to review and clear after payment.
-        </p>
+        <div>
+          <h1 className="text-2xl font-semibold">Admin — Claims Overview</h1>
+          <p className="text-sm text-gray-500">
+            Tip: Click "View claims" to review and clear after payment.
+          </p>
+        </div>
+
+        {/* Actions: view coaches + logout */}
+        <div className="flex gap-3">
+          <button
+            className="px-3 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700"
+            onClick={() => navigate("/admin/coaches")}
+          >
+            View all coaches
+          </button>
+          <button
+            className="px-3 py-1.5 bg-rose-600 text-white rounded hover:bg-rose-700"
+            onClick={handleLogout}
+            aria-label="Log out"
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
-      {error && <p className="text-red-400 mb-3">{error}</p>}
+      {error && <p className="text-red-500 mb-3">{error}</p>}
 
       <div className="bg-white rounded-xl shadow p-4 sm:p-6">
         <div className="overflow-x-auto">
