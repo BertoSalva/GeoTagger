@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { saveAs } from "file-saver";
 import { jwtDecode } from "jwt-decode";
 import ExcelJS from "exceljs";
@@ -101,7 +101,7 @@ const GeoTagPage = () => {
   const weekday = (iso) =>
     new Date(iso).toLocaleDateString(undefined, { weekday: "long" });
 
-  // simple year-week key (Sun-start; fine for grouping)
+  // simple year-week key (Sun-start; good enough for grouping)
   const weekKey = (iso) => {
     const d = new Date(iso);
     const year = d.getFullYear();
@@ -168,64 +168,64 @@ const GeoTagPage = () => {
     }
   };
 
-  // Google map
+  // --------- Google Map (no flicker) ----------
+  // Refs for single map & marker instances
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+
+  // Create the map once
   const initMap = useCallback(() => {
-    if (currentLocation && window.google && window.google.maps) {
-      const mapOptions = {
-        center: { lat: currentLocation.latitude, lng: currentLocation.longitude },
-        zoom: 12,
-      };
-      const map = new window.google.maps.Map(
-        document.getElementById("map"),
-        mapOptions
-      );
-      new window.google.maps.Marker({
-        position: {
-          lat: currentLocation.latitude,
-          lng: currentLocation.longitude,
-        },
-        map,
-        title: "Location",
-      });
+    if (!window.google || !window.google.maps) return;
+    if (mapRef.current) return; // already inited
+
+    mapRef.current = new window.google.maps.Map(document.getElementById("map"), {
+      center: { lat: currentLocation.latitude, lng: currentLocation.longitude },
+      zoom: 12,
+    });
+
+    markerRef.current = new window.google.maps.Marker({
+      position: { lat: currentLocation.latitude, lng: currentLocation.longitude },
+      map: mapRef.current,
+      title: "Location",
+    });
+  }, []); // no deps → runs only once when script is ready
+
+  // When currentLocation changes, just move marker & pan (no re-init)
+  useEffect(() => {
+    if (markerRef.current && mapRef.current) {
+      const pos = { lat: currentLocation.latitude, lng: currentLocation.longitude };
+      markerRef.current.setPosition(pos);
+      mapRef.current.panTo(pos);
     }
   }, [currentLocation]);
 
+  // One-time startup: fetch IP/tags, load Maps script once, then init map
   useEffect(() => {
     fetchIpAddress();
     loadUserTags();
 
+    const onReady = () => initMap();
+
     if (window.google && window.google.maps) {
-      initMap();
+      onReady();
       return;
     }
 
     const scriptId = "google-maps-script";
-    const existingScript = document.getElementById(scriptId);
-
-    if (!existingScript) {
+    if (!document.getElementById(scriptId)) {
       const script = document.createElement("script");
       script.id = scriptId;
       script.src =
-        "https://maps.googleapis.com/maps/api/js?key=AIzaSyCOCu38e9cnVI6yjtBUTuwBVtyOBuvlMIg&libraries=places&callback=initMap";
+        "https://maps.googleapis.com/maps/api/js?key=AIzaSyCOCu38e9cnVI6yjtBUTuwBVtyOBuvlMIg&libraries=places";
       script.async = true;
       script.defer = true;
       script.onerror = () => setError("Failed to load Google Maps API.");
-
-      window.initMap = initMap;
+      script.onload = onReady;
       document.head.appendChild(script);
     } else {
-      initMap();
+      onReady();
     }
-
-    return () => {
-      const scriptElement = document.getElementById(scriptId);
-      if (scriptElement) {
-        scriptElement.remove();
-      }
-      // optional: don't hard-delete window.google in shared apps
-      // delete window.google;
-    };
-  }, [initMap, loadUserTags]);
+  }, []); // run once
 
   const fetchGeoTag = async () => {
     // Block multiple tags in the same local day
@@ -267,7 +267,7 @@ const GeoTagPage = () => {
               setHasTaggedToday(true);
               await loadUserTags();
               showToast("Tagged successfully for the day.");
-              initMap();
+              // No initMap() here — marker moves via the effect on currentLocation
             }
           } else {
             setAddress("Address not found");
@@ -292,8 +292,9 @@ const GeoTagPage = () => {
       const email = getEmailFromToken();
 
       if (!email) {
-        setError("Could not determine user email from token. Please log in again.");
-        showToast("Please log in again.", "error");
+        const msg = "Could not determine user email from token. Please log in again.";
+        setError(msg);
+        showToast(msg, "error");
         return false;
       }
 
@@ -338,8 +339,9 @@ const GeoTagPage = () => {
       const token = localStorage.getItem("token");
       const email = localStorage.getItem("email") || getEmailFromToken();
       if (!email) {
-        setError("User email not found. Please log in again.");
-        showToast("User email not found.", "error");
+        const msg = "User email not found. Please log in again.";
+        setError(msg);
+        showToast(msg, "error");
         return;
       }
 
@@ -520,7 +522,7 @@ const GeoTagPage = () => {
     }
   };
 
-  // Group tags by week
+  // Group tags by week (compact view)
   const groupedByWeek = tags
     .slice()
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -652,7 +654,16 @@ const GeoTagPage = () => {
             <p className="text-gray-600 text-sm">No sessions recorded yet.</p>
           ) : (
             <div className="space-y-4 max-h-80 overflow-auto pr-1">
-              {Object.entries(groupedByWeek).map(([wk, entries]) => (
+              {Object.entries(
+                tags
+                  .slice()
+                  .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                  .reduce((acc, t) => {
+                    const key = weekKey(t.createdAt);
+                    (acc[key] = acc[key] || []).push(t);
+                    return acc;
+                  }, {})
+              ).map(([wk, entries]) => (
                 <div key={wk}>
                   <div className="font-medium text-gray-700 mb-1">{wk}</div>
                   <ul className="space-y-1 ml-3">
