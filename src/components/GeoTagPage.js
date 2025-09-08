@@ -3,6 +3,32 @@ import { saveAs } from "file-saver";
 import { jwtDecode } from "jwt-decode";
 import ExcelJS from "exceljs";
 
+/** Simple toast component */
+const Toast = ({ show, message, type = "success", onClose }) => {
+  if (!show) return null;
+  const base =
+    "fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm flex items-start gap-3";
+  const look =
+    type === "success"
+      ? "bg-green-600 text-white"
+      : type === "error"
+      ? "bg-red-600 text-white"
+      : "bg-gray-800 text-white";
+  return (
+    <div className={`${base} ${look}`}>
+      <span className="mt-0.5">✔</span>
+      <div className="pr-6">{message}</div>
+      <button
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute top-2 right-2 opacity-80 hover:opacity-100"
+      >
+        ✕
+      </button>
+    </div>
+  );
+};
+
 const GeoTagPage = () => {
   const [location, setLocation] = useState(null);
   const [address, setAddress] = useState("");
@@ -10,6 +36,10 @@ const GeoTagPage = () => {
   const [error, setError] = useState("");
   const [sessionType, setSessionType] = useState("Practice");
   const [hasTaggedToday, setHasTaggedToday] = useState(false);
+
+  // toast + tags state
+  const [toast, setToast] = useState({ show: false, message: "", type: "success" });
+  const [tags, setTags] = useState([]);
 
   // Default coordinates if geolocation fails
   const defaultLocation = { latitude: 25.7566, longitude: 28.1914 };
@@ -37,7 +67,6 @@ const GeoTagPage = () => {
     }
   };
 
-  // Pull a human-friendly display name from token; fallback to email prefix
   const getDisplayNameFromToken = () => {
     const cached = localStorage.getItem("displayName");
     if (cached) return cached;
@@ -61,7 +90,6 @@ const GeoTagPage = () => {
     }
   };
 
-  // Make a string safe for filenames
   const safeFile = (s) => (s || "claims").replace(/[\\/:*?"<>|]+/g, "-").trim();
 
   const dateKey = (d) =>
@@ -69,27 +97,64 @@ const GeoTagPage = () => {
       d.getDate()
     ).padStart(2, "0")}`;
 
-  const refreshTaggedToday = useCallback(async () => {
+  // weekday label like "Tuesday"
+  const weekday = (iso) =>
+    new Date(iso).toLocaleDateString(undefined, { weekday: "long" });
+
+  // simple year-week key (Sun-start; fine for grouping)
+  const weekKey = (iso) => {
+    const d = new Date(iso);
+    const year = d.getFullYear();
+    const week = Math.ceil(
+      ((d - new Date(year, 0, 1)) / 86400000 + new Date(year, 0, 1).getDay() + 1) / 7
+    );
+    return `${year}-W${String(week).padStart(2, "0")}`;
+  };
+
+  /** central fetch for user's tags; updates hasTaggedToday + tags list */
+  const loadUserTags = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
       const email = localStorage.getItem("email") || getEmailFromToken();
-      if (!email) return false;
+      if (!email) {
+        setTags([]);
+        setHasTaggedToday(false);
+        return { already: false, list: [] };
+      }
 
       const url = `https://geotagger-api.fly.dev/api/GeoTag?email=${encodeURIComponent(email)}`;
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) return false;
+      if (!res.ok) {
+        setTags([]);
+        setHasTaggedToday(false);
+        return { already: false, list: [] };
+      }
 
-      const tags = await res.json();
+      const list = await res.json();
+      setTags(Array.isArray(list) ? list : []);
       const today = dateKey(new Date());
-      const already = tags.some((t) => dateKey(new Date(t.createdAt)) === today);
+      const already = (Array.isArray(list) ? list : []).some(
+        (t) => dateKey(new Date(t.createdAt)) === today
+      );
       setHasTaggedToday(already);
-      return already;
+      return { already, list };
     } catch {
-      return false;
+      setTags([]);
+      setHasTaggedToday(false);
+      return { already: false, list: [] };
     }
   }, []);
+
+  // Maintain a short-lived toast
+  const showToast = (message, type = "success", ms = 3200) => {
+    setToast({ show: true, message, type });
+    window.clearTimeout(showToast._t);
+    showToast._t = window.setTimeout(() => {
+      setToast((t) => ({ ...t, show: false }));
+    }, ms);
+  };
 
   // Fetch IP address
   const fetchIpAddress = async () => {
@@ -127,7 +192,7 @@ const GeoTagPage = () => {
 
   useEffect(() => {
     fetchIpAddress();
-    refreshTaggedToday();
+    loadUserTags();
 
     if (window.google && window.google.maps) {
       initMap();
@@ -157,19 +222,23 @@ const GeoTagPage = () => {
       if (scriptElement) {
         scriptElement.remove();
       }
-      delete window.google;
+      // optional: don't hard-delete window.google in shared apps
+      // delete window.google;
     };
-  }, [initMap, refreshTaggedToday]);
+  }, [initMap, loadUserTags]);
 
   const fetchGeoTag = async () => {
     // Block multiple tags in the same local day
-    if (await refreshTaggedToday()) {
+    const { already } = await loadUserTags();
+    if (already) {
       setError("You’ve already tagged a session today. Try again tomorrow.");
+      showToast("You’ve already tagged today.", "error");
       return;
     }
 
     if (!navigator.geolocation) {
       setError("Geolocation is not supported by your browser.");
+      showToast("Geolocation is not supported.", "error");
       return;
     }
 
@@ -194,18 +263,25 @@ const GeoTagPage = () => {
               longitude,
               formattedAddress
             );
-            if (ok) setHasTaggedToday(true);
+            if (ok) {
+              setHasTaggedToday(true);
+              await loadUserTags();
+              showToast("Tagged successfully for the day.");
+              initMap();
+            }
           } else {
             setAddress("Address not found");
           }
         } catch (err) {
           console.error("Error fetching address", err);
           setError("Failed to fetch address");
+          showToast("Failed to fetch address.", "error");
         }
       },
       () => {
         setError("Unable to retrieve your location. Showing default location.");
         setLocation(defaultLocation);
+        showToast("Unable to retrieve location.", "error");
       }
     );
   };
@@ -217,6 +293,7 @@ const GeoTagPage = () => {
 
       if (!email) {
         setError("Could not determine user email from token. Please log in again.");
+        showToast("Please log in again.", "error");
         return false;
       }
 
@@ -242,12 +319,16 @@ const GeoTagPage = () => {
         return true;
       } else {
         console.error("Failed to save tag", result);
-        setError(result?.message || "Failed to save tag");
+        const msg = result?.message || "Failed to save tag";
+        setError(msg);
+        showToast(msg, "error");
         return false;
       }
     } catch (error) {
       console.error("Error sending data to server", error);
-      setError("Error sending data to server");
+      const msg = "Error sending data to server";
+      setError(msg);
+      showToast(msg, "error");
       return false;
     }
   };
@@ -258,6 +339,7 @@ const GeoTagPage = () => {
       const email = localStorage.getItem("email") || getEmailFromToken();
       if (!email) {
         setError("User email not found. Please log in again.");
+        showToast("User email not found.", "error");
         return;
       }
 
@@ -285,11 +367,9 @@ const GeoTagPage = () => {
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("Claims");
 
-      // helpers
       const thinGray = { style: "thin", color: { argb: "FFCCCCCC" } };
       const borderBlack = (weight) => ({ style: weight, color: { argb: "FF000000" } });
 
-      // Box borders over a range (A=1,B=2,...) with grid inside
       function boxRange(ws, fromCol, fromRow, toCol, toRow) {
         for (let r = fromRow; r <= toRow; r++) {
           for (let c = fromCol; c <= toCol; c++) {
@@ -308,13 +388,11 @@ const GeoTagPage = () => {
         }
       }
 
-      // ---- Title ----
       ws.mergeCells("A1:D1");
       ws.getCell("A1").value = "PBHS eTag Claims Report";
       ws.getCell("A1").font = { size: 16, bold: true };
       ws.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
 
-      // ---- Logo (fixed size, centered-ish under title) ----
       try {
         const imgResp = await fetch(require("../assets/pbhs.png"));
         const imgBlob = await imgResp.blob();
@@ -323,7 +401,7 @@ const GeoTagPage = () => {
         ws.getRow(2).height = 35;
         ws.getRow(3).height = 35;
         ws.addImage(imgId, {
-          tl: { col: 1.7, row: 1.4 }, // between B & C, under title
+          tl: { col: 1.7, row: 1.4 },
           ext: { width: 260, height: 140 },
           editAs: "oneCell",
         });
@@ -331,7 +409,6 @@ const GeoTagPage = () => {
         console.warn("Could not insert PBHS logo", e);
       }
 
-      // ---- Table ----
       const headerRow = 8;
       let rowIdx = headerRow;
 
@@ -357,29 +434,26 @@ const GeoTagPage = () => {
           ws.getRow(rowIdx).eachCell((c, colNumber) => {
             c.border = { top: thinGray, left: thinGray, bottom: thinGray, right: thinGray };
             if (colNumber === 3) {
-              c.numFmt = '#,##0.00';
+              c.numFmt = "#,##0.00";
               c.alignment = { horizontal: "right" };
             }
           });
         });
 
-      // Total row
       rowIdx += 1;
       ws.getRow(rowIdx).values = ["Total", "", netTotal, ""];
       ws.getRow(rowIdx).font = { bold: true };
       ws.getRow(rowIdx).eachCell((c, colNumber) => {
         c.border = { top: thinGray, left: thinGray, bottom: thinGray, right: thinGray };
         if (colNumber === 3) {
-          c.numFmt = '#,##0.00';
+          c.numFmt = "#,##0.00";
           c.alignment = { horizontal: "right" };
         }
       });
 
-      // Apply box + grid to the whole table
       const tableEndRow = rowIdx;
       boxRange(ws, 1, headerRow, 4, tableEndRow);
 
-      // ---- Summary ----
       rowIdx += 2;
       const summaryTitleRow = rowIdx;
       ws.getCell(`A${summaryTitleRow}`).value = "Summary";
@@ -397,7 +471,7 @@ const GeoTagPage = () => {
       summaryRows.forEach(([label, val]) => {
         ws.getRow(rowIdx).values = [label, val];
         if (String(label).toLowerCase().startsWith("net total")) {
-          ws.getCell(`B${rowIdx}`).numFmt = '#,##0.00';
+          ws.getCell(`B${rowIdx}`).numFmt = "#,##0.00";
         }
         rowIdx += 1;
       });
@@ -405,7 +479,6 @@ const GeoTagPage = () => {
       const summaryEndRow = rowIdx - 1;
       boxRange(ws, 1, summaryTitleRow, 2, summaryEndRow);
 
-      // ---- Column widths ----
       ws.columns = [
         { key: "date", width: 14 },
         { key: "type", width: 18 },
@@ -413,7 +486,6 @@ const GeoTagPage = () => {
         { key: "addr", width: 60 },
       ];
 
-      // ---- Save File (with name + date) ----
       const displayName =
         getDisplayNameFromToken() || (email ? email.split("@")[0] : "claims");
       const today = new Date();
@@ -427,71 +499,120 @@ const GeoTagPage = () => {
       saveAs(new Blob([out]), fileName);
     } catch (error) {
       console.error("Error downloading claims", error);
-      setError((error && error.message) || "Error downloading claims.");
+      const msg = (error && error.message) || "Error downloading claims.";
+      setError(msg);
+      showToast(msg, "error");
     }
   };
 
-  return (
-    <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
-      <h1 className="text-2xl font-semibold text-center text-gray-700 mb-4 flex items-center justify-center">
-        <span className="mr-2">eTag</span>
-        <img
-          src={require("../assets/pbhs.png")}
-          alt="eTag Icon"
-          className="w-6 h-6"
-        />
-      </h1>
+  /** logout */
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem("token");
+      localStorage.removeItem("email");
+      localStorage.removeItem("displayName");
+    } finally {
+      if (window.location && window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      } else {
+        window.location.reload();
+      }
+    }
+  };
 
-      <div className="flex flex-col items-center mb-6">
-        <label htmlFor="sessionType" className="mb-2 text-gray-700 font-medium">
-          Select Session Type:
-        </label>
-        <select
-          id="sessionType"
-          value={sessionType}
-          onChange={(e) => setSessionType(e.target.value)}
-          className="px-4 py-2 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          style={{ color: "black" }}
+  // Group tags by week
+  const groupedByWeek = tags
+    .slice()
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .reduce((acc, t) => {
+      const key = weekKey(t.createdAt);
+      (acc[key] = acc[key] || []).push(t);
+      return acc;
+    }, {});
+
+  return (
+    <div className="max-w-5xl mx-auto p-6 bg-white rounded-lg shadow-lg">
+      {/* Toast */}
+      <Toast
+        show={toast.show}
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast((t) => ({ ...t, show: false }))}
+      />
+
+      {/* Header + Logout */}
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold text-gray-700 flex items-center">
+          <span className="mr-2">eTag</span>
+          <img
+            src={require("../assets/pbhs.png")}
+            alt="eTag Icon"
+            className="w-6 h-6"
+          />
+        </h1>
+
+        <button
+          onClick={handleLogout}
+          className="px-4 py-2 bg-gray-800 text-white rounded-lg shadow hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-500"
         >
-          <option value="Preseason" style={{ color: "black" }}>
-            Preseason
-          </option>
-          <option value="Practice" style={{ color: "black" }}>
-            Practice
-          </option>
-          <option value="Game" style={{ color: "black" }}>
-            Game
-          </option>
-        </select>
+          Logout
+        </button>
       </div>
 
-      <div className="flex justify-center mb-6">
-        <button
-          onClick={fetchGeoTag}
-          disabled={hasTaggedToday}
-          className={
-            "px-6 py-2 text-white font-semibold rounded-lg shadow-md focus:outline-none " +
-            (hasTaggedToday
-              ? "bg-blue-600 opacity-50 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500")
-          }
-        >
-          Tag Session
-        </button>
-        <button
-          onClick={downloadClaimsAsExcel}
-          className="ml-4 px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
-        >
-          Download Claims
-        </button>
+      {/* Controls */}
+      <div className="flex flex-col md:flex-row md:items-end md:justify-between mb-6 gap-4">
+        <div className="flex flex-col">
+          <label htmlFor="sessionType" className="mb-2 text-gray-700 font-medium">
+            Select Session Type:
+          </label>
+          <select
+            id="sessionType"
+            value={sessionType}
+            onChange={(e) => setSessionType(e.target.value)}
+            className="px-4 py-2 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            style={{ color: "black" }}
+          >
+            <option value="Preseason" style={{ color: "black" }}>
+              Preseason
+            </option>
+            <option value="Practice" style={{ color: "black" }}>
+              Practice
+            </option>
+            <option value="Game" style={{ color: "black" }}>
+              Game
+            </option>
+          </select>
+        </div>
+
+        <div className="flex">
+          <button
+            onClick={fetchGeoTag}
+            disabled={hasTaggedToday}
+            className={
+              "px-6 py-2 text-white font-semibold rounded-lg shadow-md focus:outline-none " +
+              (hasTaggedToday
+                ? "bg-blue-600 opacity-50 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500")
+            }
+          >
+            Tag Session
+          </button>
+          <button
+            onClick={downloadClaimsAsExcel}
+            className="ml-4 px-6 py-2 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+          >
+            Download Claims
+          </button>
+        </div>
       </div>
 
       {hasTaggedToday && (
-        <p className="text-sm text-gray-600 text-center -mt-3 mb-4">
+        <p className="text-sm text-gray-600 -mt-3 mb-4">
           You’ve already tagged a session today. Try again tomorrow.
         </p>
       )}
 
+      {/* Address + IP */}
       {address && (
         <div className="mt-6 p-4 border rounded-lg bg-gray-50">
           <h3 className="text-lg font-semibold text-gray-800">Address:</h3>
@@ -509,7 +630,47 @@ const GeoTagPage = () => {
         <p className="mt-6 text-center text-red-600 font-medium">{error}</p>
       )}
 
-      <div id="map" className="mt-6 w-full h-80 border rounded-lg"></div>
+      {/* Layout: Map + Tagged Weeks (compact) */}
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <div id="map" className="w-full h-80 border rounded-lg"></div>
+        </div>
+
+        {/* Tagged Weeks Compact List */}
+        <div className="border rounded-lg p-4 bg-gray-50">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-semibold text-gray-800">Your Tagged Weeks</h3>
+            <button
+              onClick={loadUserTags}
+              className="text-sm px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
+            >
+              Refresh
+            </button>
+          </div>
+
+          {tags.length === 0 ? (
+            <p className="text-gray-600 text-sm">No sessions recorded yet.</p>
+          ) : (
+            <div className="space-y-4 max-h-80 overflow-auto pr-1">
+              {Object.entries(groupedByWeek).map(([wk, entries]) => (
+                <div key={wk}>
+                  <div className="font-medium text-gray-700 mb-1">{wk}</div>
+                  <ul className="space-y-1 ml-3">
+                    {entries.map((t, idx) => (
+                      <li key={idx} className="flex items-center gap-2 text-sm">
+                        <span className="px-2 py-0.5 rounded border bg-blue-50 text-blue-700 border-blue-200">
+                          {t.sessionType}
+                        </span>
+                        <span className="text-gray-800">{weekday(t.createdAt)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
